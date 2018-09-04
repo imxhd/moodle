@@ -178,8 +178,7 @@ class mod_assign_renderer extends plugin_renderer_base {
         $o = '';
 
         $o .= $this->output->container_start('submitforgrading');
-        $o .= $this->output->heading(get_string('submitassignment', 'assign'), 3);
-        $o .= $this->output->spacer(array('height'=>30));
+        $o .= $this->output->heading(get_string('confirmsubmissionheading', 'assign'), 3);
 
         $cancelurl = new moodle_url('/mod/assign/view.php', array('id' => $page->coursemoduleid));
         if (count($page->notifications)) {
@@ -194,9 +193,7 @@ class mod_assign_renderer extends plugin_renderer_base {
             $o .= $this->output->continue_button($cancelurl);
         } else {
             // All submission plugins ready - show the confirmation form.
-            $o .= $this->output->box_start('generalbox submitconfirm');
             $o .= $this->moodleform($page->confirmform);
-            $o .= $this->output->box_end();
         }
         $o .= $this->output->container_end();
 
@@ -269,6 +266,10 @@ class mod_assign_renderer extends plugin_renderer_base {
         $o .= $this->output->heading(get_string('gradingsummary', 'assign'), 3);
         $o .= $this->output->box_start('boxaligncenter gradingsummarytable');
         $t = new html_table();
+
+        // Visibility Status.
+        $this->add_table_row_tuple($t, get_string('hiddenfromstudents'),
+            (!$summary->isvisible) ? get_string('yes') : get_string('no'));
 
         // Status.
         if ($summary->teamsubmission) {
@@ -1420,11 +1421,15 @@ class mod_assign_renderer extends plugin_renderer_base {
                                              'moodle',
                                              array('class'=>'icon'));
             $result .= '<li yuiConfig=\'' . json_encode($yuiconfig) . '\'>' .
-                       '<div>' . $image . ' ' .
-                                 $file->fileurl . ' ' .
-                                 $plagiarismlinks . ' ' .
-                                 $file->portfoliobutton . '</div>' .
-                       '</li>';
+                '<div>' .
+                    '<div class="fileuploadsubmission">' . $image . ' ' .
+                    $file->fileurl . ' ' .
+                    $plagiarismlinks . ' ' .
+                    $file->portfoliobutton . ' ' .
+                    '</div>' .
+                    '<div class="fileuploadsubmissiontime">' . $file->timemodified . '</div>' .
+                '</div>' .
+            '</li>';
         }
 
         $result .= '</ul>';

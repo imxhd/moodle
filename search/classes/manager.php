@@ -134,14 +134,29 @@ class manager {
     }
 
     /**
+     * @var int Record time of each successful schema check, but not more than once per 10 minutes.
+     */
+    const SCHEMA_CHECK_TRACKING_DELAY = 10 * 60;
+
+    /**
+     * @var int Require a new schema check at least every 4 hours.
+     */
+    const SCHEMA_CHECK_REQUIRED_EVERY = 4 * 3600;
+
+    /**
      * Returns an initialised \core_search instance.
+     *
+     * While constructing the instance, checks on the search schema may be carried out. The $fast
+     * parameter provides a way to skip those checks on pages which are used frequently. It has
+     * no effect if an instance has already been constructed in this request.
      *
      * @see \core_search\engine::is_installed
      * @see \core_search\engine::is_server_ready
+     * @param bool $fast Set to true when calling on a page that requires high performance
      * @throws \core_search\engine_exception
      * @return \core_search\manager
      */
-    public static function instance() {
+    public static function instance($fast = false) {
         global $CFG;
 
         // One per request, this should be purged during testing.
@@ -157,6 +172,17 @@ class manager {
             throw new \core_search\engine_exception('enginenotfound', 'search', '', $CFG->searchengine);
         }
 
+        // Get time now and at last schema check.
+        $now = (int)self::get_current_time();
+        $lastschemacheck = get_config($engine->get_plugin_name(), 'lastschemacheck');
+
+        // On pages where performance matters, tell the engine to skip schema checks.
+        $skipcheck = false;
+        if ($fast && $now < $lastschemacheck + self::SCHEMA_CHECK_REQUIRED_EVERY) {
+            $skipcheck = true;
+            $engine->skip_schema_check();
+        }
+
         if (!$engine->is_installed()) {
             throw new \core_search\engine_exception('enginenotinstalled', 'search', '', $CFG->searchengine);
         }
@@ -165,9 +191,17 @@ class manager {
         if ($serverstatus !== true) {
             // Skip this error in Behat when faking seach results.
             if (!defined('BEHAT_SITE_RUNNING') || !get_config('core_search', 'behat_fakeresult')) {
+                // Clear the record of successful schema checks since it might have failed.
+                unset_config('lastschemacheck', $engine->get_plugin_name());
                 // Error message with no details as this is an exception that any user may find if the server crashes.
                 throw new \core_search\engine_exception('engineserverstatus', 'search');
             }
+        }
+
+        // If we did a successful schema check, record this, but not more than once per 10 minutes
+        // (to avoid updating the config db table/cache too often in case it gets called frequently).
+        if (!$skipcheck && $now >= $lastschemacheck + self::SCHEMA_CHECK_TRACKING_DELAY) {
+            set_config('lastschemacheck', $now, $engine->get_plugin_name());
         }
 
         static::$instance = new \core_search\manager($engine);
@@ -337,6 +371,7 @@ class manager {
         static::$instance = null;
 
         base_block::clear_static();
+        engine::clear_users_cache();
     }
 
     /**
@@ -364,11 +399,15 @@ class manager {
     }
 
     /**
-     * Returns the contexts the user can access.
+     * Returns information about the areas which the user can access.
      *
-     * The returned value is a multidimensional array because some search engines can group
-     * information and there will be a performance benefit on passing only some contexts
-     * instead of the whole context array set.
+     * The returned value is a stdClass object with the following fields:
+     * - everything (bool, true for admin only)
+     * - usercontexts (indexed by area identifier then context
+     * - separategroupscontexts (contexts within which group restrictions apply)
+     * - visiblegroupscontextsareas (overrides to the above when the same contexts also have
+     *   'visible groups' for certain search area ids - hopefully rare)
+     * - usergroups (groups which the current user belongs to)
      *
      * The areas can be limited by course id and context id. If specifying context ids, results
      * are limited to the exact context ids specified and not their children (for example, giving
@@ -378,7 +417,7 @@ class manager {
      *
      * @param array|false $limitcourseids An array of course ids to limit the search to. False for no limiting.
      * @param array|false $limitcontextids An array of context ids to limit the search to. False for no limiting.
-     * @return bool|array Indexed by area identifier (component + area name). Returns true if the user can see everything.
+     * @return \stdClass Object as described above
      */
     protected function get_areas_user_accesses($limitcourseids = false, $limitcontextids = false) {
         global $DB, $USER;
@@ -386,7 +425,7 @@ class manager {
         // All results for admins (unless they have chosen to limit results). Eventually we could
         // add a new capability for managers.
         if (is_siteadmin() && !$limitcourseids && !$limitcontextids) {
-            return true;
+            return (object)array('everything' => true);
         }
 
         $areasbylevel = array();
@@ -403,6 +442,11 @@ class manager {
 
         // This will store area - allowed contexts relations.
         $areascontexts = array();
+
+        // Initialise two special-case arrays for storing other information related to the contexts.
+        $separategroupscontexts = array();
+        $visiblegroupscontextsareas = array();
+        $usergroups = array();
 
         if (empty($limitcourseids) && !empty($areasbylevel[CONTEXT_SYSTEM])) {
             // We add system context to all search areas working at this level. Here each area is fully responsible of
@@ -453,6 +497,7 @@ class manager {
 
         // Keep a list of included course context ids (needed for the block calculation below).
         $coursecontextids = [];
+        $modulecms = [];
 
         foreach ($courses as $course) {
             if (!empty($limitcourseids) && !in_array($course->id, $limitcourseids)) {
@@ -462,6 +507,7 @@ class manager {
 
             $coursecontext = \context_course::instance($course->id);
             $coursecontextids[] = $coursecontext->id;
+            $hasgrouprestrictions = false;
 
             // Info about the course modules.
             $modinfo = get_fast_modinfo($course);
@@ -491,10 +537,46 @@ class manager {
                             continue;
                         }
                         if ($modinstance->uservisible) {
-                            $areascontexts[$areaid][$modinstance->context->id] = $modinstance->context->id;
+                            $contextid = $modinstance->context->id;
+                            $areascontexts[$areaid][$contextid] = $contextid;
+                            $modulecms[$modinstance->id] = $modinstance;
+
+                            if (!has_capability('moodle/site:accessallgroups', $modinstance->context) &&
+                                    ($searchclass instanceof base_mod) &&
+                                    $searchclass->supports_group_restriction()) {
+                                if ($searchclass->restrict_cm_access_by_group($modinstance)) {
+                                    $separategroupscontexts[$contextid] = $contextid;
+                                    $hasgrouprestrictions = true;
+                                } else {
+                                    // Track a list of anything that has a group id (so might get
+                                    // filtered) and doesn't want to be, in this context.
+                                    if (!array_key_exists($contextid, $visiblegroupscontextsareas)) {
+                                        $visiblegroupscontextsareas[$contextid] = array();
+                                    }
+                                    $visiblegroupscontextsareas[$contextid][$areaid] = $areaid;
+                                }
+                            }
                         }
                     }
                 }
+            }
+
+            // Insert group information for course (unless there aren't any modules restricted by
+            // group for this user in this course, in which case don't bother).
+            if ($hasgrouprestrictions) {
+                $groups = groups_get_all_groups($course->id, $USER->id, 0, 'g.id');
+                foreach ($groups as $group) {
+                    $usergroups[$group->id] = $group->id;
+                }
+            }
+        }
+
+        // Chuck away all the 'visible groups contexts' data unless there is actually something
+        // that does use separate groups in the same context (this data is only used as an
+        // 'override' in cases where the search is restricting to separate groups).
+        foreach ($visiblegroupscontextsareas as $contextid => $areas) {
+            if (!array_key_exists($contextid, $separategroupscontexts)) {
+                unset($visiblegroupscontextsareas[$contextid]);
             }
         }
 
@@ -564,7 +646,10 @@ class manager {
             }
         }
 
-        return $areascontexts;
+        // Return all the data.
+        return (object)array('everything' => false, 'usercontexts' => $areascontexts,
+                'separategroupscontexts' => $separategroupscontexts, 'usergroups' => $usergroups,
+                'visiblegroupscontextsareas' => $visiblegroupscontextsareas);
     }
 
     /**
@@ -634,6 +719,9 @@ class manager {
      * - q (query text)
      * - courseids (optional list of course ids to restrict)
      * - contextids (optional list of context ids to restrict)
+     * - context (Moodle context object for location user searched from)
+     * - order (optional ordering, one of the types supported by the search engine e.g. 'relevance')
+     * - userids (optional list of user ids to restrict)
      *
      * @param \stdClass $formdata Query input data (usually from search form)
      * @param int $limit The maximum number of documents to return
@@ -687,12 +775,19 @@ class manager {
         // Clears previous query errors.
         $this->engine->clear_query_error();
 
-        $areascontexts = $this->get_areas_user_accesses($limitcourseids, $limitcontextids);
-        if (!$areascontexts) {
+        $contextinfo = $this->get_areas_user_accesses($limitcourseids, $limitcontextids);
+        if (!$contextinfo->everything && !$contextinfo->usercontexts) {
             // User can not access any context.
             $docs = array();
         } else {
-            $docs = $this->engine->execute_query($formdata, $areascontexts, $limit);
+            // If engine does not support groups, remove group information from the context info -
+            // use the old format instead (true = admin, array = user contexts).
+            if (!$this->engine->supports_group_filtering()) {
+                $contextinfo = $contextinfo->everything ? true : $contextinfo->usercontexts;
+            }
+
+            // Execute the actual query.
+            $docs = $this->engine->execute_query($formdata, $contextinfo, $limit);
         }
 
         return $docs;
@@ -1244,7 +1339,12 @@ class manager {
             }
 
             // Show a message before each request, indicating what will be indexed.
-            $context = \context::instance_by_id($request->contextid);
+            $context = \context::instance_by_id($request->contextid, IGNORE_MISSING);
+            if (!$context) {
+                $DB->delete_records('search_index_requests', ['id' => $request->id]);
+                $progress->output('Skipped deleted context: ' . $request->contextid);
+                continue;
+            }
             $contextname = $context->get_context_name();
             if ($request->searcharea) {
                 $contextname .= ' (search area: ' . $request->searcharea . ')';

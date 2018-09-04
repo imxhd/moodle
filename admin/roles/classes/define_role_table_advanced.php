@@ -103,6 +103,8 @@ class core_role_define_role_table_advanced extends core_role_capability_table_wi
             $this->role->shortname = core_text::strtolower(clean_param($this->role->shortname, PARAM_ALPHANUMEXT));
             if (empty($this->role->shortname)) {
                 $this->errors['shortname'] = get_string('errorbadroleshortname', 'core_role');
+            } else if (core_text::strlen($this->role->shortname) > 100) { // Check if it exceeds the max of 100 characters.
+                $this->errors['shortname'] = get_string('errorroleshortnametoolong', 'core_role');
             }
         }
         if ($DB->record_exists_select('role', 'shortname = ? and id <> ?', array($this->role->shortname, $this->roleid))) {
@@ -432,7 +434,7 @@ class core_role_define_role_table_advanced extends core_role_capability_table_wi
     }
 
     public function save_changes() {
-        global $DB, $CFG;
+        global $DB;
 
         if (!$this->roleid) {
             // Creating role.
@@ -446,8 +448,7 @@ class core_role_define_role_table_advanced extends core_role_capability_table_wi
             // the UI. It would be better to do this only when we know that fields affected are
             // updated. But thats getting into the weeds of the coursecat cache and role edits
             // should not be that frequent, so here is the ugly brutal approach.
-            require_once($CFG->libdir . '/coursecatlib.php');
-            coursecat::role_assignment_changed($this->role->id, context_system::instance());
+            core_course_category::role_assignment_changed($this->role->id, context_system::instance());
         }
 
         // Assignable contexts.
@@ -496,7 +497,7 @@ class core_role_define_role_table_advanced extends core_role_capability_table_wi
     }
 
     protected function get_shortname_field($id) {
-        return '<input type="text" id="' . $id . '" name="' . $id . '" maxlength="254" value="' . s($this->role->shortname) . '"' .
+        return '<input type="text" id="' . $id . '" name="' . $id . '" maxlength="100" value="' . s($this->role->shortname) . '"' .
                 ' class="form-control"/>';
     }
 
@@ -526,9 +527,11 @@ class core_role_define_role_table_advanced extends core_role_capability_table_wi
             if (!$this->disabled) {
                 $output .= '<input type="hidden" name="contextlevel' . $cl . '" value="0" />';
             }
-            $output .= '<input type="checkbox" id="cl' . $cl . '" name="contextlevel' . $cl .
+            $output .= '<div class="form-check justify-content-start w-100">';
+            $output .= '<input class="form-check-input" type="checkbox" id="cl' . $cl . '" name="contextlevel' . $cl .
                 '" value="1" ' . $extraarguments . '/> ';
-            $output .= '<label for="cl' . $cl . '">' . $clname . "</label><br />\n";
+            $output .= '<label class="form-check-label" for="cl' . $cl . '">' . $clname . "</label>\n";
+            $output .= '</div>';
         }
         return $output;
     }

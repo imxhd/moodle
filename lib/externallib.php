@@ -208,10 +208,10 @@ class external_api {
             // Do not allow access to write or delete webservices as a public user.
             if ($externalfunctioninfo->loginrequired) {
                 if (defined('NO_MOODLE_COOKIES') && NO_MOODLE_COOKIES && !PHPUNIT_TEST) {
-                    throw new moodle_exception('servicenotavailable', 'webservice');
+                    throw new moodle_exception('servicerequireslogin', 'webservice');
                 }
                 if (!isloggedin()) {
-                    throw new moodle_exception('servicenotavailable', 'webservice');
+                    throw new moodle_exception('servicerequireslogin', 'webservice');
                 } else {
                     require_sesskey();
                 }
@@ -221,11 +221,28 @@ class external_api {
             $params = call_user_func($callable,
                                      $externalfunctioninfo->parameters_desc,
                                      $args);
+            $params = array_values($params);
 
-            // Execute - gulp!
-            $callable = array($externalfunctioninfo->classname, $externalfunctioninfo->methodname);
-            $result = call_user_func_array($callable,
-                                           array_values($params));
+            // Allow any Moodle plugin a chance to override this call. This is a convenient spot to
+            // make arbitrary behaviour customisations. The overriding plugin could call the 'real'
+            // function first and then modify the results, or it could do a completely separate
+            // thing.
+            $callbacks = get_plugins_with_function('override_webservice_execution');
+            $result = false;
+            foreach ($callbacks as $plugintype => $plugins) {
+                foreach ($plugins as $plugin => $callback) {
+                    $result = $callback($externalfunctioninfo, $params);
+                    if ($result !== false) {
+                        break;
+                    }
+                }
+            }
+
+            // If the function was not overridden, call the real one.
+            if ($result === false) {
+                $callable = array($externalfunctioninfo->classname, $externalfunctioninfo->methodname);
+                $result = call_user_func_array($callable, $params);
+            }
 
             // Validate the return parameters.
             if ($externalfunctioninfo->returns_desc !== null) {
@@ -977,6 +994,9 @@ function external_format_text($text, $textformat, $contextorid, $component = nul
         $text = file_rewrite_pluginfile_urls($text, $settings->get_file(), $contextid, $component, $filearea, $itemid);
     }
 
+    // Note that $CFG->forceclean does not apply here if the client requests for the raw database content.
+    // This is consistent with web clients that are still able to load non-cleaned text into editors, too.
+
     if (!$settings->get_raw()) {
         $options = (array)$options;
 
@@ -1175,6 +1195,9 @@ class external_settings {
     /** @var string In which file should the urls be rewritten */
     private $file = 'webservice/pluginfile.php';
 
+    /** @var string The session lang */
+    private $lang = '';
+
     /**
      * Constructor - protected - can not be instanciated
      */
@@ -1276,6 +1299,24 @@ class external_settings {
      */
     public function get_file() {
         return $this->file;
+    }
+
+    /**
+     * Set lang
+     *
+     * @param string $lang
+     */
+    public function set_lang($lang) {
+        $this->lang = $lang;
+    }
+
+    /**
+     * Get lang
+     *
+     * @return string
+     */
+    public function get_lang() {
+        return $this->lang;
     }
 }
 

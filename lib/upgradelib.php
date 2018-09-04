@@ -430,6 +430,13 @@ function upgrade_stale_php_files_present() {
     global $CFG;
 
     $someexamplesofremovedfiles = array(
+        // Removed in 3.6.
+        '/lib/medialib.php',
+        '/lib/password_compat/lib/password.php',
+        // Removed in 3.5.
+        '/lib/dml/mssql_native_moodle_database.php',
+        '/lib/dml/mssql_native_moodle_recordset.php',
+        '/lib/dml/mssql_native_moodle_temptables.php',
         // Removed in 3.4.
         '/auth/README.txt',
         '/calendar/set.php',
@@ -567,7 +574,6 @@ function upgrade_plugins($type, $startcallback, $endcallback, $verbose) {
                     update_capabilities($component);
                     log_update_descriptions($component);
                     external_update_descriptions($component);
-                    events_update_definition($component);
                     \core\task\manager::reset_scheduled_tasks_for_component($component);
                     message_update_providers($component);
                     \core\message\inbound\manager::update_handlers_for_component($component);
@@ -606,7 +612,6 @@ function upgrade_plugins($type, $startcallback, $endcallback, $verbose) {
             update_capabilities($component);
             log_update_descriptions($component);
             external_update_descriptions($component);
-            events_update_definition($component);
             \core\task\manager::reset_scheduled_tasks_for_component($component);
             message_update_providers($component);
             \core\message\inbound\manager::update_handlers_for_component($component);
@@ -640,7 +645,6 @@ function upgrade_plugins($type, $startcallback, $endcallback, $verbose) {
             update_capabilities($component);
             log_update_descriptions($component);
             external_update_descriptions($component);
-            events_update_definition($component);
             \core\task\manager::reset_scheduled_tasks_for_component($component);
             message_update_providers($component);
             \core\message\inbound\manager::update_handlers_for_component($component);
@@ -748,7 +752,6 @@ function upgrade_plugins_modules($startcallback, $endcallback, $verbose) {
                     update_capabilities($component);
                     log_update_descriptions($component);
                     external_update_descriptions($component);
-                    events_update_definition($component);
                     \core\task\manager::reset_scheduled_tasks_for_component($component);
                     message_update_providers($component);
                     \core\message\inbound\manager::update_handlers_for_component($component);
@@ -783,7 +786,6 @@ function upgrade_plugins_modules($startcallback, $endcallback, $verbose) {
             update_capabilities($component);
             log_update_descriptions($component);
             external_update_descriptions($component);
-            events_update_definition($component);
             \core\task\manager::reset_scheduled_tasks_for_component($component);
             message_update_providers($component);
             \core\message\inbound\manager::update_handlers_for_component($component);
@@ -820,7 +822,6 @@ function upgrade_plugins_modules($startcallback, $endcallback, $verbose) {
             update_capabilities($component);
             log_update_descriptions($component);
             external_update_descriptions($component);
-            events_update_definition($component);
             \core\task\manager::reset_scheduled_tasks_for_component($component);
             message_update_providers($component);
             \core\message\inbound\manager::update_handlers_for_component($component);
@@ -942,7 +943,6 @@ function upgrade_plugins_blocks($startcallback, $endcallback, $verbose) {
                     update_capabilities($component);
                     log_update_descriptions($component);
                     external_update_descriptions($component);
-                    events_update_definition($component);
                     \core\task\manager::reset_scheduled_tasks_for_component($component);
                     message_update_providers($component);
                     \core\message\inbound\manager::update_handlers_for_component($component);
@@ -983,7 +983,6 @@ function upgrade_plugins_blocks($startcallback, $endcallback, $verbose) {
             update_capabilities($component);
             log_update_descriptions($component);
             external_update_descriptions($component);
-            events_update_definition($component);
             \core\task\manager::reset_scheduled_tasks_for_component($component);
             message_update_providers($component);
             \core\message\inbound\manager::update_handlers_for_component($component);
@@ -1019,7 +1018,6 @@ function upgrade_plugins_blocks($startcallback, $endcallback, $verbose) {
             update_capabilities($component);
             log_update_descriptions($component);
             external_update_descriptions($component);
-            events_update_definition($component);
             \core\task\manager::reset_scheduled_tasks_for_component($component);
             message_update_providers($component);
             \core\message\inbound\manager::update_handlers_for_component($component);
@@ -1713,6 +1711,9 @@ function install_core($version, $verbose) {
     remove_dir($CFG->tempdir.'', true);
     make_temp_directory('', true);
 
+    remove_dir($CFG->backuptempdir.'', true);
+    make_backup_temp_directory('', true);
+
     remove_dir($CFG->dataroot.'/muc', true);
     make_writable_directory($CFG->dataroot.'/muc', true);
 
@@ -1733,7 +1734,6 @@ function install_core($version, $verbose) {
         // Continue with the installation
         log_update_descriptions('moodle');
         external_update_descriptions('moodle');
-        events_update_definition('moodle');
         \core\task\manager::reset_scheduled_tasks_for_component('moodle');
         message_update_providers('moodle');
         \core\message\inbound\manager::update_handlers_for_component('moodle');
@@ -1801,7 +1801,6 @@ function upgrade_core($version, $verbose) {
         update_capabilities('moodle');
         log_update_descriptions('moodle');
         external_update_descriptions('moodle');
-        events_update_definition('moodle');
         \core\task\manager::reset_scheduled_tasks_for_component('moodle');
         message_update_providers('moodle');
         \core\message\inbound\manager::update_handlers_for_component('moodle');

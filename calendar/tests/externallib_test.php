@@ -506,6 +506,7 @@ class core_calendar_externallib_testcase extends externallib_advanced_testcase {
         // Should be just one, since there's just one category event of the course I am enrolled (course3 - cat2b).
         $this->assertEquals(1, count($events['events']));
         $this->assertEquals($catevent2->id, $events['events'][0]['id']);
+        $this->assertEquals($category2->id, $events['events'][0]['categoryid']);
         $this->assertEquals(0, count($events['warnings']));
 
         // Now get category events but by course (there aren't course events in the course).
@@ -536,7 +537,9 @@ class core_calendar_externallib_testcase extends externallib_advanced_testcase {
         $this->assertEquals(2, count($events['events']));
         $this->assertEquals(0, count($events['warnings']));
         $this->assertEquals($catevent1->id, $events['events'][0]['id']);
+        $this->assertEquals($category->id, $events['events'][0]['categoryid']);
         $this->assertEquals($catevent2->id, $events['events'][1]['id']);
+        $this->assertEquals($category2->id, $events['events'][1]['categoryid']);
     }
 
     /**
@@ -1513,6 +1516,7 @@ class core_calendar_externallib_testcase extends externallib_advanced_testcase {
                 'text' => '',
                 'format' => 1,
             ],
+            'location' => 'Test',
             'duration' => 1,
             'timedurationuntil' => [
                 'day' => $timedurationuntil->format('j'),
@@ -1571,6 +1575,7 @@ class core_calendar_externallib_testcase extends externallib_advanced_testcase {
                 'format' => 1,
                 'itemid' => 0
             ],
+            'location' => 'Test',
             'duration' => 1,
             'timedurationuntil' => [
                 'day' => $timedurationuntil->format('j'),
@@ -1634,6 +1639,7 @@ class core_calendar_externallib_testcase extends externallib_advanced_testcase {
                 'text' => '',
                 'format' => 1,
             ],
+            'location' => 'Test',
             'duration' => 1,
             'timedurationuntil' => [
                 'day' => $timedurationuntil->format('j'),
@@ -1695,6 +1701,7 @@ class core_calendar_externallib_testcase extends externallib_advanced_testcase {
                 'format' => 1,
                 'itemid' => 0
             ],
+            'location' => 'Test',
             'duration' => 1,
             'timedurationuntil' => [
                 'day' => $timedurationuntil->format('j'),
@@ -1759,6 +1766,7 @@ class core_calendar_externallib_testcase extends externallib_advanced_testcase {
                 'text' => '',
                 'format' => 1,
             ],
+            'location' => 'Test',
             'duration' => 1,
             'timedurationuntil' => [
                 'day' => $timedurationuntil->format('j'),
@@ -1823,6 +1831,7 @@ class core_calendar_externallib_testcase extends externallib_advanced_testcase {
                 'format' => 1,
                 'itemid' => 0,
             ],
+            'location' => 'Test',
             'duration' => 1,
             'timedurationuntil' => [
                 'day' => $timedurationuntil->format('j'),
@@ -1891,6 +1900,7 @@ class core_calendar_externallib_testcase extends externallib_advanced_testcase {
                 'text' => '',
                 'format' => 1,
             ],
+            'location' => 'Test',
             'duration' => 1,
             'timedurationuntil' => [
                 'day' => $timedurationuntil->format('j'),
@@ -1956,6 +1966,7 @@ class core_calendar_externallib_testcase extends externallib_advanced_testcase {
                 'text' => '',
                 'format' => 1,
             ],
+            'location' => 'Test',
             'duration' => 1,
             'timedurationuntil' => [
                 'day' => $timedurationuntil->format('j'),
@@ -1978,12 +1989,12 @@ class core_calendar_externallib_testcase extends externallib_advanced_testcase {
         $this->resetAfterTest(true);
         $this->setUser($user);
 
-        $this->expectException('moodle_exception');
-
-        external_api::clean_returnvalue(
+        $result = external_api::clean_returnvalue(
             core_calendar_external::submit_create_update_form_returns(),
             core_calendar_external::submit_create_update_form($querystring)
         );
+
+        $this->assertTrue($result['validationerror']);
     }
 
     /**
@@ -2016,13 +2027,14 @@ class core_calendar_externallib_testcase extends externallib_advanced_testcase {
                 'minute' => 0,
             ],
             'eventtype' => 'group',
-            'groupid' => "{$course->id}-{$group->id}", // The form format.
+            'groupid' => $group->id,
             'groupcourseid' => $course->id,
             'description' => [
                 'text' => '',
                 'format' => 1,
                 'itemid' => 0
             ],
+            'location' => 'Test',
             'duration' => 1,
             'timedurationuntil' => [
                 'day' => $timedurationuntil->format('j'),
@@ -2088,13 +2100,14 @@ class core_calendar_externallib_testcase extends externallib_advanced_testcase {
                 'minute' => 0,
             ],
             'eventtype' => 'group',
-            'groupid' => "{$course->id}-{$group->id}", // The form format.
+            'groupid' => $group->id,
             'groupcourseid' => $course->id,
             'description' => [
                 'text' => '',
                 'format' => 1,
                 'itemid' => 0
             ],
+            'location' => 'Test',
             'duration' => 1,
             'timedurationuntil' => [
                 'day' => $timedurationuntil->format('j'),
@@ -2161,13 +2174,14 @@ class core_calendar_externallib_testcase extends externallib_advanced_testcase {
                 'minute' => 0,
             ],
             'eventtype' => 'group',
-            'groupid' => "{$course->id}-{$group->id}", // The form format.
+            'groupid' => $group->id,
             'groupcourseid' => $course->id,
             'description' => [
                 'text' => '',
                 'format' => 1,
                 'itemid' => 0
             ],
+            'location' => 'Test',
             'duration' => 1,
             'timedurationuntil' => [
                 'day' => $timedurationuntil->format('j'),
@@ -2234,12 +2248,13 @@ class core_calendar_externallib_testcase extends externallib_advanced_testcase {
                 'minute' => 0,
             ],
             'eventtype' => 'group',
-            'groupid' => "{$course->id}-{$group->id}", // The form format.
+            'groupid' => $group->id,
             'groupcourseid' => $course->id,
             'description' => [
                 'text' => '',
                 'format' => 1,
             ],
+            'location' => 'Test',
             'duration' => 1,
             'timedurationuntil' => [
                 'day' => $timedurationuntil->format('j'),
@@ -2294,7 +2309,7 @@ class core_calendar_externallib_testcase extends externallib_advanced_testcase {
         $data = external_api::clean_returnvalue(
             core_calendar_external::get_calendar_monthly_view_returns(),
             core_calendar_external::get_calendar_monthly_view($timestart->format('Y'), $timestart->format('n'),
-                                                              $course->id, null, false)
+                                                              $course->id, null, false, true)
         );
         $this->assertEquals($data['courseid'], $course->id);
         // User enrolled in the course can load the course calendar.
@@ -2302,7 +2317,7 @@ class core_calendar_externallib_testcase extends externallib_advanced_testcase {
         $data = external_api::clean_returnvalue(
             core_calendar_external::get_calendar_monthly_view_returns(),
             core_calendar_external::get_calendar_monthly_view($timestart->format('Y'), $timestart->format('n'),
-                                                              $course->id, null, false)
+                                                              $course->id, null, false, true)
         );
         $this->assertEquals($data['courseid'], $course->id);
         // User not enrolled in the course cannot load the course calendar.
@@ -2311,7 +2326,7 @@ class core_calendar_externallib_testcase extends externallib_advanced_testcase {
         $data = external_api::clean_returnvalue(
             core_calendar_external::get_calendar_monthly_view_returns(),
             core_calendar_external::get_calendar_monthly_view($timestart->format('Y'), $timestart->format('n'),
-                                                              $course->id, null, false)
+                                                              $course->id, null, false, false)
         );
     }
 

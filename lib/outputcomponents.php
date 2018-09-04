@@ -207,6 +207,11 @@ class user_picture implements renderable {
     public $includefullname = false;
 
     /**
+     * @var bool Include user authentication token.
+     */
+    public $includetoken = false;
+
+    /**
      * User picture constructor.
      *
      * @param stdClass $user user record with at least id, picture, imagealt, firstname and lastname set.
@@ -403,7 +408,8 @@ class user_picture implements renderable {
                 $path .= $page->theme->name.'/';
             }
             // Set the image URL to the URL for the uploaded file and return.
-            $url = moodle_url::make_pluginfile_url($contextid, 'user', 'icon', NULL, $path, $filename);
+            $url = moodle_url::make_pluginfile_url(
+                    $contextid, 'user', 'icon', null, $path, $filename, false, $this->includetoken);
             $url->param('rev', $this->user->picture);
             return $url;
         }
@@ -4140,6 +4146,12 @@ class action_menu implements renderable, templatable {
     public $menutrigger = '';
 
     /**
+     * Any extra classes for toggling to the secondary menu.
+     * @var triggerextraclasses
+     */
+    public $triggerextraclasses = '';
+
+    /**
      * Place the action menu before all other actions.
      * @var prioritise
      */
@@ -4178,8 +4190,16 @@ class action_menu implements renderable, templatable {
         }
     }
 
-    public function set_menu_trigger($trigger) {
+    /**
+     * Sets the menu trigger text.
+     *
+     * @param string $trigger The text
+     * @param string $extraclasses Extra classes to style the secondary menu toggle.
+     * @return null
+     */
+    public function set_menu_trigger($trigger, $extraclasses = '') {
         $this->menutrigger = $trigger;
+        $this->triggerextraclasses = $extraclasses;
     }
 
     /**
@@ -4369,6 +4389,9 @@ class action_menu implements renderable, templatable {
      * The constraint is applied when the dialogue is shown and limits the display of the dialogue to within the
      * element the constraint identifies.
      *
+     * This is required whenever the action menu is displayed inside any CSS element with the .no-overflow class
+     * (flexible_table and any of it's child classes are a likely candidate).
+     *
      * @param string $ancestorselector A snippet of CSS used to identify the ancestor to contrain the dialogue to.
      */
     public function set_constraint($ancestorselector) {
@@ -4457,6 +4480,7 @@ class action_menu implements renderable, templatable {
         $actionicon = $this->actionicon;
         if (!empty($this->menutrigger)) {
             $primary->menutrigger = $this->menutrigger;
+            $primary->triggerextraclasses = $this->triggerextraclasses;
         } else {
             $primary->title = get_string('actions');
             $actionicon = new pix_icon('t/edit_menu', '', 'moodle', ['class' => 'iconsmall actionmenu', 'title' => '']);
@@ -4767,8 +4791,8 @@ class progress_bar implements renderable, templatable {
      * @param bool $autostart Whether to start the progress bar right away.
      */
     public function __construct($htmlid = '', $width = 500, $autostart = false) {
-        if (!defined('NO_OUTPUT_BUFFERING') || !NO_OUTPUT_BUFFERING) {
-            debugging('progress_bar used without setting NO_OUTPUT_BUFFERING.', DEBUG_DEVELOPER);
+        if (!CLI_SCRIPT && !NO_OUTPUT_BUFFERING) {
+            debugging('progress_bar used in a non-CLI script without setting NO_OUTPUT_BUFFERING.', DEBUG_DEVELOPER);
         }
 
         if (!empty($htmlid)) {

@@ -286,7 +286,11 @@ function get_role_definitions(array $roleids) {
     // Grab all keys we have not yet got in our static cache.
     if ($uncached = array_diff($roleids, array_keys($ACCESSLIB_PRIVATE->cacheroledefs))) {
         $cache = cache::make('core', 'roledefs');
-        $ACCESSLIB_PRIVATE->cacheroledefs += array_filter($cache->get_many($uncached));
+        foreach ($cache->get_many($uncached) as $roleid => $cachedroledef) {
+            if (is_array($cachedroledef)) {
+                $ACCESSLIB_PRIVATE->cacheroledefs[$roleid] = $cachedroledef;
+            }
+        }
 
         // Check we have the remaining keys from the MUC.
         if ($uncached = array_diff($roleids, array_keys($ACCESSLIB_PRIVATE->cacheroledefs))) {
@@ -313,20 +317,25 @@ function get_role_definitions_uncached(array $roleids) {
         return array();
     }
 
-    list($sql, $params) = $DB->get_in_or_equal($roleids);
+    // Create a blank results array: even if a role has no capabilities,
+    // we need to ensure it is included in the results to show we have
+    // loaded all the capabilities that there are.
     $rdefs = array();
+    foreach ($roleids as $roleid) {
+        $rdefs[$roleid] = array();
+    }
 
+    // Load all the capabilities for these roles in all contexts.
+    list($sql, $params) = $DB->get_in_or_equal($roleids);
     $sql = "SELECT ctx.path, rc.roleid, rc.capability, rc.permission
               FROM {role_capabilities} rc
               JOIN {context} ctx ON rc.contextid = ctx.id
              WHERE rc.roleid $sql";
     $rs = $DB->get_recordset_sql($sql, $params);
 
+    // Store the capabilities into the expected data structure.
     foreach ($rs as $rd) {
         if (!isset($rdefs[$rd->roleid][$rd->path])) {
-            if (!isset($rdefs[$rd->roleid])) {
-                $rdefs[$rd->roleid] = array();
-            }
             $rdefs[$rd->roleid][$rd->path] = array();
         }
         $rdefs[$rd->roleid][$rd->path][$rd->capability] = (int) $rd->permission;
@@ -1411,7 +1420,7 @@ function get_roles_with_capability($capability, $permission = null, $context = n
  * @return int new/existing id of the assignment
  */
 function role_assign($roleid, $userid, $contextid, $component = '', $itemid = 0, $timemodified = '') {
-    global $USER, $DB, $CFG;
+    global $USER, $DB;
 
     // first of all detect if somebody is using old style parameters
     if ($contextid === 0 or is_numeric($component)) {
@@ -1492,8 +1501,7 @@ function role_assign($roleid, $userid, $contextid, $component = '', $itemid = 0,
         reload_all_capabilities();
     }
 
-    require_once($CFG->libdir . '/coursecatlib.php');
-    coursecat::role_assignment_changed($roleid, $context);
+    core_course_category::role_assignment_changed($roleid, $context);
 
     $event = \core\event\role_assigned::create(array(
         'context' => $context,
@@ -1552,7 +1560,6 @@ function role_unassign($roleid, $userid, $contextid, $component = '', $itemid = 
  */
 function role_unassign_all(array $params, $subcontexts = false, $includemanual = false) {
     global $USER, $CFG, $DB;
-    require_once($CFG->libdir . '/coursecatlib.php');
 
     if (!$params) {
         throw new coding_exception('Missing parameters in role_unsassign_all() call');
@@ -1603,7 +1610,7 @@ function role_unassign_all(array $params, $subcontexts = false, $includemanual =
             ));
             $event->add_record_snapshot('role_assignments', $ra);
             $event->trigger();
-            coursecat::role_assignment_changed($ra->roleid, $context);
+            core_course_category::role_assignment_changed($ra->roleid, $context);
         }
     }
     unset($ras);
@@ -1635,7 +1642,7 @@ function role_unassign_all(array $params, $subcontexts = false, $includemanual =
                             'other'=>array('id'=>$ra->id, 'component'=>$ra->component, 'itemid'=>$ra->itemid)));
                     $event->add_record_snapshot('role_assignments', $ra);
                     $event->trigger();
-                    coursecat::role_assignment_changed($ra->roleid, $context);
+                    core_course_category::role_assignment_changed($ra->roleid, $context);
                 }
             }
         }
@@ -2539,12 +2546,17 @@ function get_profile_roles(context $context) {
  * Gets the list of roles assigned to this context and up (parents)
  *
  * @param context $context
+ * @param boolean $includeparents, false means without parents.
  * @return array
  */
-function get_roles_used_in_context(context $context) {
+function get_roles_used_in_context(context $context, $includeparents = true) {
     global $DB;
 
-    list($contextlist, $params) = $DB->get_in_or_equal($context->get_parent_context_ids(true), SQL_PARAMS_NAMED, 'cl');
+    if ($includeparents === true) {
+        list($contextlist, $params) = $DB->get_in_or_equal($context->get_parent_context_ids(true), SQL_PARAMS_NAMED, 'cl');
+    } else {
+        list($contextlist, $params) = $DB->get_in_or_equal($context->id, SQL_PARAMS_NAMED, 'cl');
+    }
 
     if ($coursecontext = $context->get_course_context(false)) {
         $params['coursecontext'] = $coursecontext->id;
@@ -2702,6 +2714,10 @@ function get_archetype_roles($archetype) {
 /**
  * Gets all the user roles assigned in this context, or higher contexts for a list of users.
  *
+ * If you try using the combination $userids = [], $checkparentcontexts = true then this is likely
+ * to cause an out-of-memory error on large Moodle sites, so this combination is deprecated and
+ * outputs a warning, even though it is the default.
+ *
  * @param context $context
  * @param array $userids. An empty list means fetch all role assignments for the context.
  * @param bool $checkparentcontexts defaults to true
@@ -2709,7 +2725,13 @@ function get_archetype_roles($archetype) {
  * @return array
  */
 function get_users_roles(context $context, $userids = [], $checkparentcontexts = true, $order = 'c.contextlevel DESC, r.sortorder ASC') {
-    global $USER, $DB;
+    global $DB;
+
+    if (!$userids && $checkparentcontexts) {
+        debugging('Please do not call get_users_roles() with $checkparentcontexts = true ' .
+                'and $userids array not set. This combination causes large Moodle sites ' .
+                'with lots of site-wide role assignemnts to run out of memory.', DEBUG_DEVELOPER);
+    }
 
     if ($checkparentcontexts) {
         $contextids = $context->get_parent_context_ids();
@@ -3970,22 +3992,6 @@ function get_user_capability_course($capability, $userid = null, $doanything = t
 }
 
 /**
- * This function finds the roles assigned directly to this context only
- * i.e. no roles in parent contexts
- *
- * @param context $context
- * @return array
- */
-function get_roles_on_exact_context(context $context) {
-    global $DB;
-
-    return $DB->get_records_sql("SELECT r.*
-                                   FROM {role_assignments} ra, {role} r
-                                  WHERE ra.roleid = r.id AND ra.contextid = ?",
-                                array($context->id));
-}
-
-/**
  * Switches the current user to another role for the current session and only
  * in the given context.
  *
@@ -4070,22 +4076,6 @@ function get_capabilities_from_role_on_context($role, context $context) {
                                    FROM {role_capabilities}
                                   WHERE contextid = ? AND roleid = ?",
                                 array($context->id, $role->id));
-}
-
-/**
- * Find out which roles has assignment on this context
- *
- * @param context $context
- * @return array
- *
- */
-function get_roles_with_assignment_on_context(context $context) {
-    global $DB;
-
-    return $DB->get_records_sql("SELECT r.*
-                                   FROM {role_assignments} ra, {role} r
-                                  WHERE ra.roleid = r.id AND ra.contextid = ?",
-                                array($context->id));
 }
 
 /**

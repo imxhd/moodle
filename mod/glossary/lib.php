@@ -1240,10 +1240,14 @@ function glossary_print_entry_icons($course, $cm, $glossary, $entry, $mode='',$h
             array('class' => 'glossary-hidden-note'));
     }
 
-    // Entry link.
-    $return .= '<a class="icon" title="' . get_string('entrylink', 'glossary', $altsuffix) . '" ' .
-               ' href="showentry.php?eid=' . $entry->id . '">' .
-               $OUTPUT->pix_icon('e/insert_edit_link', get_string('entrylink', 'glossary', $altsuffix)) . '</a>';
+    if ($entry->approved || has_capability('mod/glossary:approve', $context)) {
+        $output = true;
+        $return .= \html_writer::link(
+            new \moodle_url('/mod/glossary/showentry.php', ['eid' => $entry->id]),
+            $OUTPUT->pix_icon('fp/link', get_string('entrylink', 'glossary', $altsuffix), 'theme'),
+            ['title' => get_string('entrylink', 'glossary', $altsuffix), 'class' => 'icon']
+        );
+    }
 
     if (has_capability('mod/glossary:approve', $context) && !$glossary->defaultapproval && $entry->approved) {
         $output = true;
@@ -1329,7 +1333,6 @@ function glossary_print_entry_icons($course, $cm, $glossary, $entry, $mode='',$h
         $return .= '<div>'.$comment->output(true).'</div>';
         $output = true;
     }
-    $return .= '<hr>';
 
     //If we haven't calculated any REAL thing, delete result ($return)
     if (!$output) {
@@ -1373,11 +1376,12 @@ function  glossary_print_entry_lower_section($course, $cm, $glossary, $entry, $m
             echo '<tr valign="top"><td class="icons">'.$icons.'</td></tr>';
         }
         if (!empty($entry->rating)) {
-            echo '<tr valign="top"><td class="ratings">';
+            echo '<tr valign="top"><td class="ratings p-t-1">';
             glossary_print_entry_ratings($course, $entry);
             echo '</td></tr>';
         }
         echo '</table>';
+        echo "<hr>\n";
     }
 }
 
@@ -2386,6 +2390,16 @@ function glossary_generate_export_file($glossary, $ignored = "", $hook = 0) {
 
                     // Export attachments.
                     $co .= glossary_xml_export_files('ATTACHMENTFILES', 4, $context->id, 'attachment', $entry->id);
+
+                    // Export tags.
+                    $tags = core_tag_tag::get_item_tags_array('mod_glossary', 'glossary_entries', $entry->id);
+                    if (count($tags)) {
+                        $co .= glossary_start_tag("TAGS", 4, true);
+                        foreach ($tags as $tag) {
+                            $co .= glossary_full_tag("TAG", 5, false, $tag);
+                        }
+                        $co .= glossary_end_tag("TAGS", 4, true);
+                    }
 
                     $co .= glossary_end_tag("ENTRY",3,true);
                 }
@@ -3806,10 +3820,10 @@ function glossary_get_entries_by_search($glossary, $context, $query, $fullsearch
                                         $options = array()) {
     global $DB, $USER;
 
-    // Remove too little terms.
+    // Clean terms.
     $terms = explode(' ', $query);
     foreach ($terms as $key => $term) {
-        if (strlen(trim($term, '+-')) < 2) {
+        if (strlen(trim($term, '+-')) < 1) {
             unset($terms[$key]);
         }
     }

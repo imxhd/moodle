@@ -113,6 +113,7 @@ $string['auth_ntlmsso_subnet'] = 'If set, it will only attempt SSO with clients 
 $string['auth_ntlmsso_subnet_key'] = 'Subnet';
 $string['auth_ntlmsso_type_key'] = 'Authentication type';
 $string['auth_ntlmsso_type'] = 'The authentication method configured in the web server to authenticate the users (if in doubt, choose NTLM)';
+$string['cannotmaprole'] = 'The role "{$a->rolename}" cannot be mapped because its short name "{$a->shortname}" is too long and/or contains hyphens. To allow it to be mapped, the short name needs to be reduced to a maximum of {$a->charlimit} characters and any hyphens removed. <a href="{$a->link}">Edit the role</a>';
 $string['connectingldap'] = "Connecting to LDAP server...\n";
 $string['connectingldapsuccess'] = "Connecting to your LDAP server was successful";
 $string['creatingtemptable'] = "Creating temporary table {\$a}\n";
@@ -148,6 +149,7 @@ $string['start_tls'] = 'Use regular LDAP service (port 389) with TLS encryption'
 $string['start_tls_key'] = 'Use TLS';
 $string['updateremfail'] = 'Error updating LDAP record. Error code: {$a->errno}; Error string: {$a->errstring}<br/>Key ({$a->key}) - old moodle value: \'{$a->ouvalue}\' new value: \'{$a->nuvalue}\'';
 $string['updateremfailamb'] = 'Failed to update LDAP with ambiguous field {$a->key}; old moodle value: \'{$a->ouvalue}\', new value: \'{$a->nuvalue}\'';
+$string['updateremfailfield'] = 'Failed to update LDAP with non-existent field (\'{$a->ldapkey}\'). Key ({$a->key}) - old moodle value: \'{$a->ouvalue}\' new value: \'{$a->nuvalue}\'';
 $string['updatepasserror'] = 'Error in user_update_password(). Error code: {$a->errno}; Error string: {$a->errstring}';
 $string['updatepasserrorexpire'] = 'Error in user_update_password() when reading password expiry time. Error code: {$a->errno}; Error string: {$a->errstring}';
 $string['updatepasserrorexpiregrace'] = 'Error in user_update_password() when modifying expirationtime and/or gracelogins. Error code: {$a->errno}; Error string: {$a->errstring}';
@@ -164,3 +166,4 @@ $string['useracctctrlerror'] = 'Error getting userAccountControl for {$a}';
 // Deprecated since Moodle 3.4.
 $string['auth_ldap_creators'] = 'List of groups or contexts whose members are allowed to create new courses. Separate multiple groups with \';\'. Usually something like \'cn=teachers,ou=staff,o=myorg\'';
 $string['auth_ldap_creators_key'] = 'Creators';
+$string['privacy:metadata'] = 'The LDAP server authentication plugin does not store any personal data.';

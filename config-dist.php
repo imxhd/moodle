@@ -38,7 +38,7 @@ $CFG = new stdClass();
 // will be stored.  This database must already have been created         //
 // and a username/password created to access it.                         //
 
-$CFG->dbtype    = 'pgsql';      // 'pgsql', 'mariadb', 'mysqli', 'mssql', 'sqlsrv' or 'oci'
+$CFG->dbtype    = 'pgsql';      // 'pgsql', 'mariadb', 'mysqli', 'sqlsrv' or 'oci'
 $CFG->dblibrary = 'native';     // 'native' only at the moment
 $CFG->dbhost    = 'localhost';  // eg 'localhost' or 'db.isp.com' or IP
 $CFG->dbname    = 'moodle';     // database name, eg moodle
@@ -380,6 +380,12 @@ $CFG->admin = 'admin';
 //   profilingallowme, profilingallowall, profilinglifetime
 //       $CFG->earlyprofilingenabled = true;
 //
+// Disable database storage for profile data.
+// When using an exernal plugin to store profiling data it is often
+// desirable to not store the data in the database.
+//
+//      $CFG->disableprofilingtodatabase = true;
+//
 // Force displayed usernames
 //   A little hack to anonymise user names for all students.  If you set these
 //   then all non-teachers will always see these for every person.
@@ -418,8 +424,10 @@ $CFG->admin = 'admin';
 // example) in sites where the user theme should override all other theme
 // settings for accessibility reasons. You can also disable types of themes
 // (other than site)  by removing them from the array. The default setting is:
-//      $CFG->themeorder = array('course', 'category', 'session', 'user', 'site');
-// NOTE: course, category, session, user themes still require the
+//
+//     $CFG->themeorder = array('course', 'category', 'session', 'user', 'cohort', 'site');
+//
+// NOTE: course, category, session, user, cohort themes still require the
 // respective settings to be enabled
 //
 // It is possible to add extra themes directory stored outside of $CFG->dirroot.
@@ -432,9 +440,15 @@ $CFG->admin = 'admin';
 // Localcachedir is intended for server clusters, it does not have to be shared by cluster nodes.
 // The directories must not be accessible via web.
 //
-//     $CFG->tempdir = '/var/www/moodle/temp';        // Directory MUST BE SHARED by all clsuter nodes.
+//     $CFG->tempdir = '/var/www/moodle/temp';        // Directory MUST BE SHARED by all cluster nodes.
 //     $CFG->cachedir = '/var/www/moodle/cache';      // Directory MUST BE SHARED by all cluster nodes, locking required.
 //     $CFG->localcachedir = '/var/local/cache';      // Intended for local node caching.
+//
+// It is possible to specify a different backup temp directory, use local fast filesystem
+// for normal web servers. Server clusters MUST use shared filesystem for backuptempdir!
+// The directory must not be accessible via web.
+//
+//     $CFG->backuptempdir = '/var/www/moodle/backuptemp';  // Directory MUST BE SHARED by all cluster nodes.
 //
 // Some filesystems such as NFS may not support file locking operations.
 // Locking resolves race conditions and is strongly recommended for production servers.

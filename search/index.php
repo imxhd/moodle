@@ -54,7 +54,7 @@ if (\core_search\manager::is_global_search_enabled() === false) {
     exit;
 }
 
-$search = \core_search\manager::instance();
+$search = \core_search\manager::instance(true);
 
 // Set up custom data for form.
 $customdata = ['searchengine' => $search->get_engine()->get_plugin_name()];
@@ -66,12 +66,20 @@ if ($contextid) {
         $searchwithin = [];
         $searchwithin[''] = get_string('everywhere', 'search');
         $searchwithin['course'] = $coursecontext->get_context_name();
-        if ($context->contextlevel !== CONTEXT_COURSE) {
+        if ($context->contextlevel != CONTEXT_COURSE) {
             $searchwithin['context'] = $context->get_context_name();
+            if ($context->contextlevel == CONTEXT_MODULE) {
+                $customdata['withincmid'] = $context->instanceid;
+            }
         }
         $customdata['searchwithin'] = $searchwithin;
+        $customdata['withincourseid'] = $coursecontext->instanceid;
     }
+
 }
+// Get available ordering options from search engine.
+$customdata['orderoptions'] = $search->get_engine()->get_supported_orders($context);
+
 $mform = new \core_search\output\form\search(null, $customdata);
 
 $data = $mform->get_data();
@@ -110,6 +118,11 @@ if ($data && !empty($data->searchwithin)) {
             $data->contextids = [$context->id];
             break;
     }
+}
+
+// Inform search engine about source context.
+if (!empty($context) && $data) {
+    $data->context = $context;
 }
 
 // Set the page URL.

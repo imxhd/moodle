@@ -972,7 +972,7 @@ function scorm_pluginfile($course, $cm, $context, $filearea, $args, $forcedownlo
         $revision = (int)array_shift($args); // Prevents caching problems - ignored here.
         $relativepath = implode('/', $args);
         $fullpath = "/$context->id/mod_scorm/content/0/$relativepath";
-        // TODO: add any other access restrictions here if needed!
+        $options['immutable'] = true; // Add immutable option, $relativepath changes on file update.
 
     } else if ($filearea === 'package') {
         // Check if the global setting for disabling package downloads is enabled.
@@ -1449,6 +1449,14 @@ function scorm_check_mode($scorm, &$newattempt, &$attempt, $userid, &$mode) {
             // We don't need to check attempts as browse mode is set.
             return;
         }
+    }
+
+    if ($scorm->forcenewattempt == SCORM_FORCEATTEMPT_ALWAYS) {
+        // This SCORM is configured to force a new attempt on every re-entry.
+        $attempt++;
+        $newattempt = 'on';
+        $mode = 'normal';
+        return;
     }
     // Check if the scorm module is incomplete (used to validate user request to start a new attempt).
     $incomplete = true;

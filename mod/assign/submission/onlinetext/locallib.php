@@ -347,14 +347,18 @@ class assign_submission_onlinetext extends assign_submission_plugin {
         $showviewlink = true;
 
         if ($onlinetextsubmission) {
+            // This contains the shortened version of the text plus an optional 'Export to portfolio' button.
             $text = $this->assignment->render_editor_content(ASSIGNSUBMISSION_ONLINETEXT_FILEAREA,
                                                              $onlinetextsubmission->submission,
                                                              $this->get_type(),
                                                              'onlinetext',
-                                                             'assignsubmission_onlinetext');
+                                                             'assignsubmission_onlinetext', true);
 
+            // The actual submission text.
             $onlinetext = trim($onlinetextsubmission->onlinetext);
-            $shorttext = shorten_text($text, 140);
+            // The shortened version of the submission text.
+            $shorttext = shorten_text($onlinetext, 140);
+
             $plagiarismlinks = '';
 
             if (!empty($CFG->enableplagiarism)) {
@@ -366,12 +370,13 @@ class assign_submission_onlinetext extends assign_submission_plugin {
                     'course' => $this->assignment->get_course()->id,
                     'assignment' => $submission->assignment));
             }
-            if ($text != $shorttext) {
+            // We compare the actual text submission and the shortened version. If they are not equal, we show the word count.
+            if ($onlinetext != $shorttext) {
                 $wordcount = get_string('numwords', 'assignsubmission_onlinetext', count_words($onlinetext));
 
-                return $plagiarismlinks . $wordcount . $shorttext;
+                return $plagiarismlinks . $wordcount . $text;
             } else {
-                return $plagiarismlinks . $shorttext;
+                return $plagiarismlinks . $text;
             }
         }
         return '';
@@ -390,7 +395,9 @@ class assign_submission_onlinetext extends assign_submission_plugin {
         $files = array();
         $onlinetextsubmission = $this->get_onlinetext_submission($submission->id);
 
-        if ($onlinetextsubmission) {
+        // Note that this check is the same logic as the result from the is_empty function but we do
+        // not call it directly because we already have the submission record.
+        if ($onlinetextsubmission && !empty($onlinetextsubmission->onlinetext)) {
             $finaltext = $this->assignment->download_rewrite_pluginfile_urls($onlinetextsubmission->onlinetext, $user, $this);
             $formattedtext = format_text($finaltext,
                                          $onlinetextsubmission->onlineformat,
@@ -570,8 +577,13 @@ class assign_submission_onlinetext extends assign_submission_plugin {
      */
     public function is_empty(stdClass $submission) {
         $onlinetextsubmission = $this->get_onlinetext_submission($submission->id);
+        $wordcount = 0;
 
-        return empty($onlinetextsubmission->onlinetext);
+        if (isset($onlinetextsubmission->onlinetext)) {
+            $wordcount = count_words(trim($onlinetextsubmission->onlinetext));
+        }
+
+        return $wordcount == 0;
     }
 
     /**
@@ -587,7 +599,13 @@ class assign_submission_onlinetext extends assign_submission_plugin {
         if (!isset($data->onlinetext_editor)) {
             return true;
         }
-        return !strlen((string)$data->onlinetext_editor['text']);
+        $wordcount = 0;
+
+        if (isset($data->onlinetext_editor['text'])) {
+            $wordcount = count_words(trim((string)$data->onlinetext_editor['text']));
+        }
+
+        return $wordcount == 0;
     }
 
     /**

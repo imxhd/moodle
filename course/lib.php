@@ -669,9 +669,6 @@ function get_module_metadata($course, $modnames, $sectionreturn = null) {
         }
         $defaultmodule->archetype = plugin_supports('mod', $modname, FEATURE_MOD_ARCHETYPE, MOD_ARCHETYPE_OTHER);
 
-        // Legacy support for callback get_types() - do not use any more, use get_shortcuts() instead!
-        $typescallbackexists = component_callback_exists($modname, 'get_types');
-
         // Each module can implement callback modulename_get_shortcuts() in its lib.php and return the list
         // of elements to be added to activity chooser.
         $items = component_callback($modname, 'get_shortcuts', array($defaultmodule), null);
@@ -699,58 +696,14 @@ function get_module_metadata($course, $modnames, $sectionreturn = null) {
                 $modlist[$course->id][$modname][$item->name] = $item;
             }
             $return += $modlist[$course->id][$modname];
-            if ($typescallbackexists) {
-                debugging('Both callbacks get_shortcuts() and get_types() are found in module ' . $modname .
-                    '. Callback get_types() will be completely ignored', DEBUG_DEVELOPER);
-            }
             // If get_shortcuts() callback is defined, the default module action is not added.
             // It is a responsibility of the callback to add it to the return value unless it is not needed.
             continue;
         }
 
-        if ($typescallbackexists) {
-            debugging('Callback get_types() is found in module ' . $modname . ', this functionality is deprecated, ' .
-                'please use callback get_shortcuts() instead', DEBUG_DEVELOPER);
-        }
-        $types = component_callback($modname, 'get_types', array(), MOD_SUBTYPE_NO_CHILDREN);
-        if ($types !== MOD_SUBTYPE_NO_CHILDREN) {
-            // Legacy support for deprecated callback get_types(). To be removed in Moodle 3.5. TODO MDL-53697.
-            if (is_array($types) && count($types) > 0) {
-                $grouptitle = $modnamestr;
-                $icon = $OUTPUT->pix_icon('icon', '', $modname, array('class' => 'icon'));
-                foreach($types as $type) {
-                    if ($type->typestr === '--') {
-                        continue;
-                    }
-                    if (strpos($type->typestr, '--') === 0) {
-                        $grouptitle = str_replace('--', '', $type->typestr);
-                        continue;
-                    }
-                    // Set the Sub Type metadata.
-                    $subtype = new stdClass();
-                    $subtype->title = get_string('activitytypetitle', '',
-                        (object)['activity' => $grouptitle, 'type' => $type->typestr]);
-                    $subtype->type = str_replace('&amp;', '&', $type->type);
-                    $typename = preg_replace('/.*type=/', '', $subtype->type);
-                    $subtype->archetype = $type->modclass;
-
-                    if (!empty($type->help)) {
-                        $subtype->help = $type->help;
-                    } else if (get_string_manager()->string_exists('help' . $subtype->name, $modname)) {
-                        $subtype->help = get_string('help' . $subtype->name, $modname);
-                    }
-                    $subtype->link = new moodle_url($urlbase, array('add' => $modname, 'type' => $typename));
-                    $subtype->name = $modname . ':' . $subtype->link;
-                    $subtype->icon = $icon;
-                    $modlist[$course->id][$modname][$subtype->name] = $subtype;
-                }
-                $return += $modlist[$course->id][$modname];
-            }
-        } else {
-            // Neither get_shortcuts() nor get_types() callbacks found, use the default item for the activity chooser.
-            $modlist[$course->id][$modname][$modname] = $defaultmodule;
-            $return[$modname] = $defaultmodule;
-        }
+        // The callback get_shortcuts() was not found, use the default item for the activity chooser.
+        $modlist[$course->id][$modname][$modname] = $defaultmodule;
+        $return[$modname] = $defaultmodule;
     }
 
     core_collator::asort_objects_by_property($return, 'title');
@@ -775,15 +728,13 @@ function get_category_or_system_context($categoryid) {
 /**
  * Returns full course categories trees to be used in html_writer::select()
  *
- * Calls {@link coursecat::make_categories_list()} to build the tree and
+ * Calls {@link core_course_category::make_categories_list()} to build the tree and
  * adds whitespace to denote nesting
  *
- * @return array array mapping coursecat id to the display name
+ * @return array array mapping course category id to the display name
  */
 function make_categories_options() {
-    global $CFG;
-    require_once($CFG->libdir. '/coursecatlib.php');
-    $cats = coursecat::make_categories_list('', 0, ' / ');
+    $cats = core_course_category::make_categories_list('', 0, ' / ');
     foreach ($cats as $key => $value) {
         // Prefix the value with the number of spaces equal to category depth (number of separators in the value).
         $cats[$key] = str_repeat('&nbsp;', substr_count($value, ' / ')). $value;
@@ -2369,14 +2320,14 @@ function save_local_role_names($courseid, $data) {
             $DB->insert_record('role_names', $rolename);
         }
         // This will ensure the course contacts cache is purged..
-        coursecat::role_assignment_changed($roleid, $context);
+        core_course_category::role_assignment_changed($roleid, $context);
     }
 }
 
 /**
  * Returns options to use in course overviewfiles filemanager
  *
- * @param null|stdClass|course_in_list|int $course either object that has 'id' property or just the course id;
+ * @param null|stdClass|core_course_list_element|int $course either object that has 'id' property or just the course id;
  *     may be empty if course does not exist yet (course create form)
  * @return array|null array of options such as maxfiles, maxbytes, accepted_types, etc.
  *     or null if overviewfiles are disabled
@@ -2958,20 +2909,19 @@ class course_request {
      * hidden categories if he has capabilities 'moodle/site:approvecourse' and
      * 'moodle/course:changecategory'
      *
-     * @return coursecat
+     * @return core_course_category
      */
     public function get_category() {
         global $CFG;
-        require_once($CFG->libdir.'/coursecatlib.php');
         // If the category is not set, if the current user does not have the rights to change the category, or if the
         // category does not exist, we set the default category to the course to be approved.
         // The system level is used because the capability moodle/site:approvecourse is based on a system level.
         if (empty($this->properties->category) || !has_capability('moodle/course:changecategory', context_system::instance()) ||
-                (!$category = coursecat::get($this->properties->category, IGNORE_MISSING, true))) {
-            $category = coursecat::get($CFG->defaultrequestcategory, IGNORE_MISSING, true);
+                (!$category = core_course_category::get($this->properties->category, IGNORE_MISSING, true))) {
+            $category = core_course_category::get($CFG->defaultrequestcategory, IGNORE_MISSING, true);
         }
         if (!$category) {
-            $category = coursecat::get_default();
+            $category = core_course_category::get_default();
         }
         return $category;
     }
@@ -2987,6 +2937,8 @@ class course_request {
      */
     public function approve() {
         global $CFG, $DB, $USER;
+
+        require_once($CFG->dirroot . '/backup/util/includes/restore_includes.php');
 
         $user = $DB->get_record('user', array('id' => $this->properties->requester, 'deleted'=>0), '*', MUST_EXIST);
 
@@ -3017,6 +2969,12 @@ class course_request {
         $data->lang               = $courseconfig->lang;
         $data->enablecompletion   = $courseconfig->enablecompletion;
         $data->numsections        = $courseconfig->numsections;
+        $data->startdate          = usergetmidnight(time());
+        if ($courseconfig->courseenddateenabled) {
+            $data->enddate        = usergetmidnight(time()) + $courseconfig->courseduration;
+        }
+
+        list($data->fullname, $data->shortname) = restore_dbops::calculate_course_names(0, $data->fullname, $data->shortname);
 
         $course = create_course($data);
         $context = context_course::instance($course->id, MUST_EXIST);
@@ -3584,7 +3542,7 @@ function course_change_visibility($courseid, $show = true) {
 /**
  * Changes the course sortorder by one, moving it up or down one in respect to sort order.
  *
- * @param stdClass|course_in_list $course
+ * @param stdClass|core_course_list_element $course
  * @param bool $up If set to true the course will be moved up one. Otherwise down one.
  * @return bool
  */
@@ -3713,7 +3671,6 @@ function course_view($context, $sectionnumber = 0) {
  */
 function course_get_tagged_courses($tag, $exclusivemode = false, $fromctx = 0, $ctx = 0, $rec = 1, $page = 0) {
     global $CFG, $PAGE;
-    require_once($CFG->libdir . '/coursecatlib.php');
 
     $perpage = $exclusivemode ? $CFG->coursesperpage : 5;
     $displayoptions = array(
@@ -3723,7 +3680,7 @@ function course_get_tagged_courses($tag, $exclusivemode = false, $fromctx = 0, $
     );
 
     $courserenderer = $PAGE->get_renderer('core', 'course');
-    $totalcount = coursecat::search_courses_count(array('tagid' => $tag->id, 'ctx' => $ctx, 'rec' => $rec));
+    $totalcount = core_course_category::search_courses_count(array('tagid' => $tag->id, 'ctx' => $ctx, 'rec' => $rec));
     $content = $courserenderer->tagged_courses($tag->id, $exclusivemode, $ctx, $rec, $displayoptions);
     $totalpages = ceil($totalcount / $perpage);
 

@@ -78,7 +78,7 @@ class behat_mod_quiz extends behat_question_base {
                 $headings = array('question', 'page', 'maxmark');
             } else {
                 throw new ExpectationException('When adding questions to a quiz, you should give 2 or three 3 things: ' .
-                        ' the question name, the page number, and optionally the maxiumum mark. ' .
+                        ' the question name, the page number, and optionally the maximum mark. ' .
                         count($firstrow) . ' values passed.', $this->getSession());
             }
             $rows = $data->getRows();
@@ -98,9 +98,8 @@ class behat_mod_quiz extends behat_question_base {
                         'the page number column is required.', $this->getSession());
             }
 
-            // Question id.
-            $questionid = $DB->get_field('question', 'id',
-                    array('name' => $questiondata['question']), MUST_EXIST);
+            // Question id, category and type.
+            $question = $DB->get_record('question', array('name' => $questiondata['question']), 'id, category, qtype', MUST_EXIST);
 
             // Page number.
             $page = clean_param($questiondata['page'], PARAM_INT);
@@ -129,8 +128,17 @@ class behat_mod_quiz extends behat_question_base {
                 }
             }
 
-            // Add the question.
-            quiz_add_quiz_question($questionid, $quiz, $page, $maxmark);
+            if ($question->qtype == 'random') {
+                if (!array_key_exists('includingsubcategories', $questiondata) || $questiondata['includingsubcategories'] === '') {
+                    $includingsubcategories = false;
+                } else {
+                    $includingsubcategories = clean_param($questiondata['includingsubcategories'], PARAM_BOOL);
+                }
+                quiz_add_random_questions($quiz, $page, $question->category, 1, $includingsubcategories);
+            } else {
+                // Add the question.
+                quiz_add_quiz_question($question->id, $quiz, $page, $maxmark);
+            }
 
             // Require previous.
             if (array_key_exists('requireprevious', $questiondata)) {
@@ -251,7 +259,7 @@ class behat_mod_quiz extends behat_question_base {
 
         $this->execute('behat_general::click_link', $quizname);
 
-        $this->execute("behat_navigation::i_navigate_to_node_in", array($editquiz, $quizadmin));
+        $this->execute("behat_navigation::i_navigate_to_in_current_page_administration", $editquiz);
 
         $this->execute("behat_general::i_click_on", array($menuxpath, "xpath_element"));
         $this->execute("behat_general::i_click_on", array($itemxpath, "xpath_element"));

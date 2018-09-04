@@ -19,6 +19,7 @@
     $suspend      = optional_param('suspend', 0, PARAM_INT);
     $unsuspend    = optional_param('unsuspend', 0, PARAM_INT);
     $unlock       = optional_param('unlock', 0, PARAM_INT);
+    $resendemail  = optional_param('resendemail', 0, PARAM_INT);
 
     admin_externalpage_setup('editusers');
 
@@ -37,6 +38,7 @@
     $strunsuspend = get_string('unsuspenduser', 'admin');
     $strunlock = get_string('unlockaccount', 'admin');
     $strconfirm = get_string('confirm');
+    $strresendemail = get_string('resendemail');
 
     $returnurl = new moodle_url('/admin/user.php', array('sort' => $sort, 'dir' => $dir, 'perpage' => $perpage, 'page'=>$page));
 
@@ -59,6 +61,24 @@
             redirect($returnurl, get_string('usernotconfirmed', '', fullname($user, true)));
         }
 
+    } else if ($resendemail && confirm_sesskey()) {
+        if (!$user = $DB->get_record('user', ['id' => $resendemail, 'mnethostid' => $CFG->mnet_localhost_id, 'deleted' => 0])) {
+            print_error('nousers');
+        }
+
+        // Prevent spamming users who are already confirmed.
+        if ($user->confirmed) {
+            print_error('alreadyconfirmed');
+        }
+
+        $returnmsg = get_string('emailconfirmsentsuccess');
+        $messagetype = \core\output\notification::NOTIFY_SUCCESS;
+        if (!send_confirmation_email($user)) {
+            $returnmsg = get_string('emailconfirmsentfailure');
+            $messagetype = \core\output\notification::NOTIFY_ERROR;
+        }
+
+        redirect($returnurl, $returnmsg, null, $messagetype);
     } else if ($delete and confirm_sesskey()) {              // Delete a selected user, after confirmation
         require_capability('moodle/user:delete', $sitecontext);
 
@@ -160,10 +180,13 @@
 
     // Carry on with the user listing
     $context = context_system::instance();
-    $extracolumns = get_extra_user_fields($context);
+    // These columns are always shown in the users list.
+    $requiredcolumns = array('city', 'country', 'lastaccess');
+    // Extra columns containing the extra user fields, excluding the required columns (city and country, to be specific).
+    $extracolumns = get_extra_user_fields($context, $requiredcolumns);
     // Get all user name fields as an array.
     $allusernamefields = get_all_user_name_fields(false, null, null, null, true);
-    $columns = array_merge($allusernamefields, $extracolumns, array('city', 'country', 'lastaccess'));
+    $columns = array_merge($allusernamefields, $extracolumns, $requiredcolumns);
 
     foreach ($columns as $column) {
         $string[$column] = get_user_field_name($column);
@@ -246,7 +269,7 @@
 
     } else {
 
-        $countries = get_string_manager()->get_list_of_countries(false);
+        $countries = get_string_manager()->get_list_of_countries(true);
         if (empty($mnethosts)) {
             $mnethosts = $DB->get_records('mnet_host', null, 'id', 'id,wwwroot,name');
         }
@@ -359,6 +382,13 @@
                 } else {
                     $lastcolumn = "<span class=\"dimmed_text\">".get_string('confirm')."</span>";
                 }
+
+                $lastcolumn .= ' | ' . html_writer::link(new moodle_url($returnurl,
+                    [
+                        'resendemail' => $user->id,
+                        'sesskey' => sesskey()
+                    ]
+                ), $strresendemail);
             }
 
             if ($user->lastaccess) {
